@@ -9,12 +9,15 @@ import org.lwjgl.system.MemoryUtil;
 
 public class LZ4Compressor implements StorageCompressor {
     private static final ResizingThreadLocalMemoryBuffer SCRATCH = new ResizingThreadLocalMemoryBuffer(SectionSerializationStorage.BIGGEST_SERIALIZED_SECTION_SIZE + 1024);
-
     private final net.jpountz.lz4.LZ4Compressor compressor;
     private final net.jpountz.lz4.LZ4FastDecompressor decompressor;
+
     public LZ4Compressor() {
-        this.decompressor = LZ4Factory.nativeInstance().fastDecompressor();
-        this.compressor = LZ4Factory.nativeInstance().fastCompressor();
+        // fastestInstance() tenta o nativo e, se falhar, cai para Java (unsafe/safe).
+        // nativeInstance() lancaria erro no Android.
+        var factory = LZ4Factory.fastestInstance();
+        this.decompressor = factory.fastDecompressor();
+        this.compressor = factory.fastCompressor();
     }
 
     @Override
@@ -34,10 +37,10 @@ public class LZ4Compressor implements StorageCompressor {
 
     @Override
     public void close() {
+
     }
 
     public static class Config extends CompressorConfig {
-
         @Override
         public StorageCompressor build(ConfigBuildCtx ctx) {
             return new LZ4Compressor();
