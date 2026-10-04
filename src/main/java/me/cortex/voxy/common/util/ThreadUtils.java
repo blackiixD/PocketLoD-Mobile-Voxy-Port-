@@ -25,17 +25,24 @@ public class ThreadUtils {
         }
 
         if (Platform.get() == Platform.LINUX) {
-            long fn = 0;
-            try {
-                var libc = APIUtil.apiCreateLibrary("libc.so.6");
-                fn = APIUtil.apiGetFunctionAddress(libc, "sched_setaffinity");
-            } catch (Exception e) {
-                Logger.error(e);
-            }
-            schedSetaffinity = fn;
-        } else {
-            schedSetaffinity = 0;
+    long fn = 0;
+    String[] names = {"libc.so.6", "libc.so"};
+    for (String name : names) {
+        try {
+            var libc = APIUtil.apiCreateLibrary(name);
+            fn = APIUtil.apiGetFunctionAddress(libc, "sched_setaffinity");
+            if (fn != 0) break;
+        } catch (Throwable t) {
+            // UnsatisfiedLinkError não é Exception, por isso Throwable
         }
+    }
+    if (fn == 0) {
+        Logger.error("sched_setaffinity indisponível, ignorando afinidade de CPU");
+    }
+    schedSetaffinity = fn;
+} else {
+    schedSetaffinity = 0;
+}
     }
 
     public static boolean SetThreadSelectedCpuSetMasksWin32(long mask) {
