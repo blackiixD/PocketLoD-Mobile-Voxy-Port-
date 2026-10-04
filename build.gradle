@@ -348,7 +348,11 @@ tasks.register('makeExcludedRocksDB', Zip) {
 
 processIncludeJars {
     //outputs.cacheIf {true}
-    if (!INCLUDE_OTHER_ARCHS) {
+    // ALTERADO (port Android): sempre enxugar o RocksDB. O .so arm64 dele nao carrega no Android
+    // (pede libpthread.so.0), entao e peso morto. O lwjgl arm64 (lmdb/zstd) continua incluido
+    // pelo INCLUDE_OTHER_ARCHS = true la embaixo.
+    // Original: if (!INCLUDE_OTHER_ARCHS) {
+    if (true) {
         dependsOn makeExcludedRocksDB
         jars = jars.filter {!it.name.startsWith('rocksdb')}
         jars.from(makeExcludedRocksDB)
