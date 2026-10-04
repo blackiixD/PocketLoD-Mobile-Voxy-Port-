@@ -15,13 +15,20 @@ import java.util.function.Supplier;
 
 public class StorageConfigUtil {
     /**
-     * True quando rodando no Android via Zalith/Pojav. O launcher define a variavel
-     * de ambiente POJAV_LAUNCHER (o log do Create mostra: "Detected presence of
-     * environment variable POJAV_LAUNCHER").
+     * True quando rodando no Android via Zalith/Pojav.
+     * No Zalith Launcher 2 (v2.6.1) a variavel POJAV_LAUNCHER NAO existe no Env Map,
+     * entao checamos varias pistas: variaveis do Zalith/Pojav e a propriedade os.version
+     * ("Android-15" no log: "Linux (aarch64) version Android-15").
      */
     public static boolean isAndroid() {
         try {
-            return System.getenv("POJAV_LAUNCHER") != null;
+            for (String key : new String[]{"POJAV_LAUNCHER", "POJAV_RENDERER", "POJAV_NATIVEDIR", "ZALITH_VERSION_CODE", "MOD_ANDROID_RUNTIME"}) {
+                if (System.getenv(key) != null) {
+                    return true;
+                }
+            }
+            String osVersion = System.getProperty("os.version", "");
+            return osVersion.toLowerCase(java.util.Locale.ROOT).contains("android");
         } catch (Throwable t) {
             return false;
         }
