@@ -27,7 +27,8 @@ public class VoxyClient implements ClientModInitializer {
             Logger.error("AMD broken depth sampler detected, voxy does not work correctly and has been disabled, this will hopefully be fixed in the future");
         }
 
-        boolean systemSupported = Capabilities.INSTANCE.compute && Capabilities.INSTANCE.indirectParameters && !Capabilities.INSTANCE.hasBrokenDepthSampler;
+        //PocketLoD: indirectParameters is no longer required, MDICSectionRenderer has a CPU readback fallback
+        boolean systemSupported = Capabilities.INSTANCE.compute && !Capabilities.INSTANCE.hasBrokenDepthSampler;
         if (!systemSupported) {
             Logger.error("Voxy is unsupported on your system.");
             Logger.error("compute=" + Capabilities.INSTANCE.compute
@@ -35,6 +36,8 @@ public class VoxyClient implements ClientModInitializer {
                 + " brokenDepth=" + Capabilities.INSTANCE.hasBrokenDepthSampler
                 + " int64=" + Capabilities.INSTANCE.INT64_t
                 + " subgroup=" + Capabilities.INSTANCE.subgroup);
+        } else if (!Capabilities.INSTANCE.indirectParameters) {
+            Logger.warn("GPU does not support ARB_indirect_parameters, using slow CPU readback fallback");
         }
 
         if (systemSupported && System.getProperty("voxy.exclusiveLock", "false").equalsIgnoreCase("true")) {
