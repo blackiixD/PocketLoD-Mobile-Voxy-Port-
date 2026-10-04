@@ -1,10 +1,10 @@
 package me.cortex.voxy.common;
 
 import me.cortex.voxy.common.config.Serialization;
+import me.cortex.voxy.common.config.compressors.LZ4Compressor;
 import me.cortex.voxy.common.config.compressors.ZSTDCompressor;
 import me.cortex.voxy.common.config.section.SectionSerializationStorage;
-import me.cortex.voxy.common.config.storage.StorageConfig;
-import me.cortex.voxy.common.config.storage.lmdb.LMDBStorageBackend;
+import me.cortex.voxy.common.config.storage.inmemory.MemoryStorageBackend;
 import me.cortex.voxy.common.config.storage.other.CompressionStorageAdaptor;
 import me.cortex.voxy.common.config.storage.rocksdb.RocksDBStorageBackend;
 
@@ -14,25 +14,6 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 public class StorageConfigUtil {
-    /**
-     * True quando rodando no Android via Zalith/Pojav.
-     * No Zalith Launcher 2 (v2.6.1) a variavel POJAV_LAUNCHER NAO existe no Env Map,
-     * entao checamos varias pistas: variaveis do Zalith/Pojav e a propriedade os.version
-     * ("Android-15" no log: "Linux (aarch64) version Android-15").
-     */
-    public static boolean isAndroid() {
-        try {
-            for (String key : new String[]{"POJAV_LAUNCHER", "POJAV_RENDERER", "POJAV_NATIVEDIR", "ZALITH_VERSION_CODE", "MOD_ANDROID_RUNTIME"}) {
-                if (System.getenv(key) != null) {
-                    return true;
-                }
-            }
-            String osVersion = System.getProperty("os.version", "");
-            return osVersion.toLowerCase(java.util.Locale.ROOT).contains("android");
-        } catch (Throwable t) {
-            return false;
-        }
-    }
 
     public static <T> T getCreateStorageConfig(Class<T> clz, Predicate<T> verifier, Supplier<T> defaultConfig, Path path) {
         try {
@@ -40,6 +21,7 @@ public class StorageConfigUtil {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+
         var json = path.resolve("config.json");
         T config = null;
         if (Files.exists(json)) {
@@ -71,28 +53,31 @@ public class StorageConfigUtil {
         if (config == null) {
             throw new IllegalStateException("Config is still null\n");
         }
-
         return config;
     }
 
+    // Detecta Android (Zalith/Pojav) sem depender de nenhuma lib nativa
+    public static boolean isAndroid() {
+        return System.getProperty("os.version", "").startsWith("Android")
+                || System.getProperty("pojav.path.minecraft") != null
+                || System.getenv("POJAV_LAUNCHER") != null;
+    }
+
     public static SectionSerializationStorage.Config createDefaultSerializer() {
-        //Create the default config
-        //ALTERADO (port Android): o RocksDB nao carrega no Android (o .so pede libpthread.so.0, que o bionic nao tem),
-        //entao no Zalith o padrao passa a ser LMDB.
-        StorageConfig baseDB;
-        if (isAndroid()) {
-            Logger.info("Android detectado (POJAV_LAUNCHER), usando LMDB como storage padrao");
-            baseDB = new LMDBStorageBackend.Config();
-        } else {
-            baseDB = new RocksDBStorageBackend.Config();
-        }
-
-        var compressor = new ZSTDCompressor.Config();
-        compressor.compressionLevel = 1;
-
         var compression = new CompressionStorageAdaptor.Config();
-        compression.delegate = baseDB;
-        compression.compressor = compressor;
+
+        if (isAndroid()) {
+            // Sem nativos do mod: dados so em memoria, compressor LZ4 (cai para Java puro)
+            Logger.info("Android detectado, usando Memory + LZ4 (sem nativos)");
+            compression.delegate = new MemoryStorageBackend.Config();
+            compression.compressor = new LZ4Compressor.Config();
+        } else {
+            var baseDB = new RocksDBStorageBackend.Config();
+            var compressor = new ZSTDCompressor.Config();
+            compressor.compressionLevel = 1;
+            compression.delegate = baseDB;
+            compression.compressor = compressor;
+        }
 
         var serializer = new SectionSerializationStorage.Config();
         serializer.storage = compression;
