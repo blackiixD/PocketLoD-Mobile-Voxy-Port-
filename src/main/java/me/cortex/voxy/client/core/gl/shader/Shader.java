@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -21,6 +22,7 @@ import static org.lwjgl.opengl.GL20.glUseProgram;
 
 public class Shader extends TrackedObject {
     private final int id;
+
     Shader(int program) {
         id = program;
     }
@@ -38,11 +40,9 @@ public class Shader extends TrackedObject {
         glDeleteProgram(this.id);
     }
 
-
     public Shader name(String name) {
         return GlDebug.name(name, this);
     }
-
 
     public static Builder<Shader> make(IShaderProcessor... processor) {
         return makeInternal((a,b)->new Shader(b), processor);
@@ -51,8 +51,6 @@ public class Shader extends TrackedObject {
     public static Builder<AutoBindingShader> makeAuto(IShaderProcessor... processor) {
         return makeInternal(AutoBindingShader::new, processor);
     }
-
-
 
     static <T extends Shader> Builder<T> makeInternal(Builder.IShaderObjectConstructor<T> constructor, IShaderProcessor[] processors) {
         List<IShaderProcessor> aa = new ArrayList<>(List.of(processors));
@@ -69,11 +67,16 @@ public class Shader extends TrackedObject {
         protected interface IShaderObjectConstructor <J extends Shader> {
             J make(Builder<J> builder, int program);
         }
+
+        // Contador para nomear os dumps
+        private static final AtomicInteger DUMP_COUNTER = new AtomicInteger();
+
         final Map<String, String> defines = new HashMap<>();
         final Map<String, String> replacements = new LinkedHashMap<>();
         private final Map<ShaderType, String> sources = new HashMap<>();
         private final IShaderProcessor processor;
         private final IShaderObjectConstructor<T> constructor;
+
         private Builder(IShaderObjectConstructor<T> constructor, IShaderProcessor processor) {
             this.constructor = constructor;
             this.processor = processor;
@@ -142,7 +145,6 @@ public class Shader extends TrackedObject {
             return this;
         }
 
-
         private int compileToProgram() {
             int program = GL20C.glCreateProgram();
             int[] shaders = new int[this.sources.size()];
@@ -151,20 +153,18 @@ public class Shader extends TrackedObject {
                 int i = 0;
                 for (var entry : this.sources.entrySet()) {
                     String src = entry.getValue();
-
                     //Inject defines
                     src = src.substring(0, src.indexOf('\n')+1) +
                             defs
                             + src.substring(src.indexOf('\n')+1);
-
                     for (var replacement : this.replacements.entrySet()) {
                         src = src.replace(replacement.getKey(), replacement.getValue());
                     }
-
+                    // Compat (MobileGlues): troca #version / remove #extension via -Dvoxy.glsl.*
+                    src = ShaderCompat.apply(src);
                     shaders[i++] = createShader(entry.getKey(), src);
                 }
             }
-
             for (int i : shaders) {
                 GL20C.glAttachShader(program, i);
             }
@@ -173,7 +173,7 @@ public class Shader extends TrackedObject {
                 GL20C.glDetachShader(program, i);
                 GL20C.glDeleteShader(i);
             }
-            printProgramLinkLog(program);
+            printProgramLinkLog(program, this.sources.keySet());
             verifyProgramLinked(program);
             return program;
         }
@@ -184,19 +184,28 @@ public class Shader extends TrackedObject {
             return this.constructor.make(this, this.compileToProgram());
         }
 
-        private static void printProgramLinkLog(int program) {
+        private static void printProgramLinkLog(int program, Set<ShaderType> types) {
             String log = GL20C.glGetProgramInfoLog(program);
-
             if (!log.isEmpty()) {
-                Logger.error(log);
+                Logger.error("[link " + types + "] " + log.trim());
             }
         }
 
         private static void verifyProgramLinked(int program) {
             int result = GL20C.glGetProgrami(program, GL20C.GL_LINK_STATUS);
-
             if (result != GL20C.GL_TRUE) {
                 throw new RuntimeException("Shader program linking failed, see log for details");
+            }
+        }
+
+        private static void dump(String tag, ShaderType type, int shader, String src) {
+            try {
+                Path dir = Path.of("voxy_shader_dumps");
+                Files.createDirectories(dir);
+                String name = String.format("%03d_%s_%s_%d.txt", DUMP_COUNTER.incrementAndGet(), tag, type.name(), shader);
+                Files.writeString(dir.resolve(name), src);
+            } catch (IOException e) {
+                Logger.error("Failed to write shader dump", e);
             }
         }
 
@@ -211,15 +220,18 @@ public class Shader extends TrackedObject {
             }
             GL20C.glCompileShader(shader);
             String log = GL20C.glGetShaderInfoLog(shader);
-
             if (!log.isEmpty()) {
-                Logger.warn(log);
+                // Mostra QUAL shader gerou o aviso e as primeiras linhas do source
+                String head = src.lines().limit(6).collect(Collectors.joining(" | "));
+                Logger.warn("[compile " + type.name() + " #" + shader + "] " + log.trim() + " :: " + head);
+                dump("warn", type, shader, src);
+            } else if (ShaderCompat.DUMP_ALL) {
+                dump("ok", type, shader, src);
             }
-
             int result = GL20C.glGetShaderi(shader, GL20C.GL_COMPILE_STATUS);
-
             if (result != GL20C.GL_TRUE) {
                 GL20C.glDeleteShader(shader);
+                dump("fail", type, shader, src);
                 try {
                     Files.writeString(Path.of("SHADER_DUMP.txt"), src);
                 } catch (IOException e) {
@@ -227,7 +239,6 @@ public class Shader extends TrackedObject {
                 }
                 throw new RuntimeException("Shader compilation failed of type " + type.name() + ", see log for details, dumped shader");
             }
-
             return shader;
         }
     }
