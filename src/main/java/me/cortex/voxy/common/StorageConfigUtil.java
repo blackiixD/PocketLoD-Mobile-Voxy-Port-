@@ -3,6 +3,8 @@ package me.cortex.voxy.common;
 import me.cortex.voxy.common.config.Serialization;
 import me.cortex.voxy.common.config.compressors.ZSTDCompressor;
 import me.cortex.voxy.common.config.section.SectionSerializationStorage;
+import me.cortex.voxy.common.config.storage.StorageConfig;
+import me.cortex.voxy.common.config.storage.lmdb.LMDBStorageBackend;
 import me.cortex.voxy.common.config.storage.other.CompressionStorageAdaptor;
 import me.cortex.voxy.common.config.storage.rocksdb.RocksDBStorageBackend;
 
@@ -12,6 +14,18 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 public class StorageConfigUtil {
+    /**
+     * True quando rodando no Android via Zalith/Pojav. O launcher define a variavel
+     * de ambiente POJAV_LAUNCHER (o log do Create mostra: "Detected presence of
+     * environment variable POJAV_LAUNCHER").
+     */
+    public static boolean isAndroid() {
+        try {
+            return System.getenv("POJAV_LAUNCHER") != null;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
 
     public static <T> T getCreateStorageConfig(Class<T> clz, Predicate<T> verifier, Supplier<T> defaultConfig, Path path) {
         try {
@@ -40,20 +54,31 @@ public class StorageConfigUtil {
         if (config == null) {
             config = defaultConfig.get();
         }
+
         try {
             Files.writeString(json, Serialization.GSON.toJson(config));
         } catch (Exception e) {
             throw new RuntimeException("Failed write the config, aborting!", e);
         }
+
         if (config == null) {
             throw new IllegalStateException("Config is still null\n");
         }
+
         return config;
     }
 
     public static SectionSerializationStorage.Config createDefaultSerializer() {
         //Create the default config
-        var baseDB = new RocksDBStorageBackend.Config();
+        //ALTERADO (port Android): o RocksDB nao carrega no Android (o .so pede libpthread.so.0, que o bionic nao tem),
+        //entao no Zalith o padrao passa a ser LMDB.
+        StorageConfig baseDB;
+        if (isAndroid()) {
+            Logger.info("Android detectado (POJAV_LAUNCHER), usando LMDB como storage padrao");
+            baseDB = new LMDBStorageBackend.Config();
+        } else {
+            baseDB = new RocksDBStorageBackend.Config();
+        }
 
         var compressor = new ZSTDCompressor.Config();
         compressor.compressionLevel = 1;
@@ -64,7 +89,6 @@ public class StorageConfigUtil {
 
         var serializer = new SectionSerializationStorage.Config();
         serializer.storage = compression;
-
         return serializer;
     }
 }
