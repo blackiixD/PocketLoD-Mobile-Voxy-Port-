@@ -29,7 +29,12 @@ public class VoxyClient implements ClientModInitializer {
 
         boolean systemSupported = Capabilities.INSTANCE.compute && Capabilities.INSTANCE.indirectParameters && !Capabilities.INSTANCE.hasBrokenDepthSampler;
         if (!systemSupported) {
-             Logger.error("Voxy is unsupported on your system.");
+            Logger.error("Voxy is unsupported on your system.");
+            Logger.error("compute=" + Capabilities.INSTANCE.compute
+                + " indirectParameters=" + Capabilities.INSTANCE.indirectParameters
+                + " brokenDepth=" + Capabilities.INSTANCE.hasBrokenDepthSampler
+                + " int64=" + Capabilities.INSTANCE.INT64_t
+                + " subgroup=" + Capabilities.INSTANCE.subgroup);
         }
 
         if (systemSupported && System.getProperty("voxy.exclusiveLock", "false").equalsIgnoreCase("true")) {
@@ -46,11 +51,9 @@ public class VoxyClient implements ClientModInitializer {
                 Logger.error("Failed to acquire exclusive voxy lock file, mod will be disabled");
                 systemSupported = false;
             }
-
         }
 
         if (systemSupported) {
-
             SharedIndexBuffer.INSTANCE.id();
 
             VoxyCommon.setInstanceFactory(VoxyClientInstance::new);
@@ -58,7 +61,6 @@ public class VoxyClient implements ClientModInitializer {
             if (!Capabilities.INSTANCE.subgroup) {
                 Logger.warn("GPU does not support subgroup operations, expect some performance degradation");
             }
-
         }
     }
 
