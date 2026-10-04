@@ -4,7 +4,9 @@ plugins {
     id "me.champeau.jmh" version "0.7.3"
 }
 
-def INCLUDE_OTHER_ARCHS = "true".equalsIgnoreCase(project.findProperty("includeOtherArchs"))
+// ALTERADO para o port Android (Zalith Launcher 2): sempre incluir os binarios arm64.
+// Original: def INCLUDE_OTHER_ARCHS = "true".equalsIgnoreCase(project.findProperty("includeOtherArchs"))
+def INCLUDE_OTHER_ARCHS = true
 
 def isInGHA = System.getenv("GITHUB_ACTIONS") == "true"
 
