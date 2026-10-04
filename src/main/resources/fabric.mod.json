@@ -6,11 +6,12 @@
     "commit": "${commit}",
     "buildtime": "${buildtime}"
   },
-  "name": "Voxy",
-  "description": "Far distance rendering mod utilising LoDs",
-  "authors": [
-    "Cortex"
-  ],
+  "name": "PocketLoD",
+"description": "Voxy port for Zalith Launcher 2 (mobile). Far distance rendering mod utilising LoDs",
+"authors": [
+  "Cortex",
+  "blackiixD"
+],
   "contact": {
   },
   "license": "All-Rights-Reserved",
